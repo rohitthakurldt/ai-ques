@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
 import { InterviewConfig } from '@/types';
+import { startInterview } from '@/lib/api';
 
 const subjects = [
   { value: 'javascript', label: 'JavaScript' },
@@ -45,6 +46,7 @@ export default function ConfigurePage() {
     yearsOfExperience: undefined,
   });
   const [errors, setErrors] = useState<Partial<Record<keyof InterviewConfig, string>>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -56,7 +58,7 @@ export default function ConfigurePage() {
     return null;
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Partial<Record<keyof InterviewConfig, string>> = {};
 
@@ -78,9 +80,33 @@ export default function ConfigurePage() {
       return;
     }
 
-    // Store config in localStorage
-    localStorage.setItem('interviewConfig', JSON.stringify(config));
-    router.push('/interview');
+    const finalConfig: InterviewConfig = {
+      subject: config.subject!,
+      difficulty: config.difficulty!,
+      numberOfQuestions: config.numberOfQuestions!,
+      yearsOfExperience: config.yearsOfExperience!,
+    };
+
+    try {
+      setIsSubmitting(true);
+      const startResponse = await startInterview(finalConfig);
+
+      localStorage.setItem('interviewConfig', JSON.stringify(finalConfig));
+      localStorage.setItem(
+        'interviewInit',
+        JSON.stringify({
+          interviewId: startResponse.interview_id,
+          totalQuestions: startResponse.total_questions,
+          firstQuestion: startResponse.first_question,
+        })
+      );
+      router.push('/interview');
+    } catch (error) {
+      console.error('Failed to start interview:', error);
+      alert('Could not start interview. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -159,8 +185,8 @@ export default function ConfigurePage() {
               required
             />
 
-            <Button type="submit" className="w-full" size="lg">
-              Start Interview
+            <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
+              {isSubmitting ? 'Starting...' : 'Start Interview'}
             </Button>
           </form>
         </div>

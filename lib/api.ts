@@ -1,4 +1,10 @@
-import { InterviewConfig, Question, Answer } from '@/types';
+import {
+  InterviewConfig,
+  Question,
+  Answer,
+  InterviewStartResponse,
+  AnswerQuestionResponse,
+} from '@/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -58,6 +64,65 @@ export async function submitInterview(answers: Answer[]): Promise<void> {
     }
   } catch (error) {
     console.error('Error submitting interview:', error);
+  }
+}
+
+export async function startInterview(config: InterviewConfig): Promise<InterviewStartResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/interview/start`, {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        experience_years: config.yearsOfExperience,
+        subject: config.subject,
+        difficulty: config.difficulty,
+        num_questions: config.numberOfQuestions,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to start interview');
+    }
+
+    const data = await response.json();
+    return data.data as InterviewStartResponse;
+  } catch (error) {
+    console.error('Error starting interview:', error);
+    throw error;
+  }
+}
+
+export async function answerQuestion(params: {
+  interviewId: string;
+  answer: string;
+  questionNumber: number;
+}): Promise<AnswerQuestionResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/interview/answer`, {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        interview_id: params.interviewId,
+        answer: params.answer,
+        question_number: params.questionNumber,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to submit answer');
+    }
+
+    const data = await response.json();
+    return data.data as AnswerQuestionResponse;
+  } catch (error) {
+    console.error('Error submitting answer:', error);
+    throw error;
   }
 }
 

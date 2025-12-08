@@ -8,7 +8,7 @@ import { SpeechButton } from '@/components/ui/SpeechButton';
 import { SpeechToText } from '@/components/ui/SpeechToText';
 import { Toast } from '@/components/ui/Toast';
 import { InterviewConfig, Question, Answer } from '@/types';
-import { fetchQuestions, submitAnswer, submitInterview } from '@/lib/api';
+import { answerQuestion } from '@/lib/api';
 import { getRandomIntroHeading } from '@/lib/utils';
 
 const INTERVIEW_STATE_KEY = 'interviewState';
@@ -21,6 +21,8 @@ const saveInterviewState = (state: {
   introAnswer: string;
   currentAnswer: string;
   introHeading: string;
+  interviewId: string;
+  totalQuestions: number;
 }) => {
   try {
     localStorage.setItem(INTERVIEW_STATE_KEY, JSON.stringify(state));
@@ -37,6 +39,8 @@ const loadInterviewState = (): {
   introAnswer: string;
   currentAnswer: string;
   introHeading: string;
+  interviewId: string;
+  totalQuestions: number;
 } | null => {
   try {
     const saved = localStorage.getItem(INTERVIEW_STATE_KEY);
@@ -69,6 +73,8 @@ export default function InterviewPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [interviewId, setInterviewId] = useState('');
+  const [totalQuestions, setTotalQuestions] = useState(0);
   const [introHeading, setIntroHeading] = useState(() => {
     // Only try to load saved heading on client side
     if (typeof window !== 'undefined') {
@@ -96,46 +102,46 @@ export default function InterviewPage() {
       setIntroAnswer(savedState.introAnswer);
       setCurrentAnswer(savedState.currentAnswer);
       setIntroHeading(savedState.introHeading);
+      setInterviewId(savedState.interviewId);
+      setTotalQuestions(savedState.totalQuestions);
       setIsLoading(false);
     } else {
-      // Load config from localStorage
+      // Load config and initial interview data from localStorage
       const savedConfig = localStorage.getItem('interviewConfig');
-      if (!savedConfig) {
+      const savedInit = localStorage.getItem('interviewInit');
+      if (!savedConfig || !savedInit) {
         router.push('/configure');
         return;
       }
 
       const interviewConfig: InterviewConfig = JSON.parse(savedConfig);
-      setConfig(interviewConfig);
+      const { interviewId: id, totalQuestions: total, firstQuestion } = JSON.parse(savedInit) as {
+        interviewId: string;
+        totalQuestions: number;
+        firstQuestion: {
+          question_number: number;
+          question: string;
+          difficulty: 'easy' | 'medium' | 'hard';
+          topic: string;
+        };
+      };
 
-      // Fetch questions
-      loadQuestions(interviewConfig);
+      const mappedQuestion: Question = {
+        id: `q-${firstQuestion.question_number}`,
+        question: firstQuestion.question,
+        type: 'technical',
+        questionNumber: firstQuestion.question_number,
+        topic: firstQuestion.topic,
+        difficulty: firstQuestion.difficulty,
+      };
+
+      setInterviewId(id);
+      setTotalQuestions(total);
+      setConfig(interviewConfig);
+      setQuestions([mappedQuestion]);
+      setIsLoading(false);
     }
   }, [isAuthenticated, router]);
-
-  const loadQuestions = async (interviewConfig: InterviewConfig) => {
-    try {
-      setIsLoading(true);
-      const fetchedQuestions = await fetchQuestions(interviewConfig);
-      setQuestions(fetchedQuestions);
-      
-      // Save initial state
-      saveInterviewState({
-        config: interviewConfig,
-        currentQuestionIndex: -1,
-        questions: fetchedQuestions,
-        answers: [],
-        introAnswer: '',
-        currentAnswer: '',
-        introHeading,
-      });
-      
-      setIsLoading(false);
-    } catch (error) {
-      console.error('Error loading questions:', error);
-      setIsLoading(false);
-    }
-  };
 
   // Helper function to save state
   const saveState = useCallback(() => {
@@ -148,9 +154,11 @@ export default function InterviewPage() {
         introAnswer,
         currentAnswer,
         introHeading,
+        interviewId,
+        totalQuestions,
       });
     }
-  }, [config, currentQuestionIndex, questions, answers, introAnswer, currentAnswer, introHeading]);
+  }, [config, currentQuestionIndex, questions, answers, introAnswer, currentAnswer, introHeading, interviewId, totalQuestions]);
 
   // Save state whenever key values change
   useEffect(() => {
@@ -181,40 +189,9 @@ export default function InterviewPage() {
       return;
     }
 
-    const currentQuestion = questions[currentQuestionIndex];
-    if (!currentQuestion) return;
-
-    setIsSubmitting(true);
-
-    // Save answer locally
-    const answerObj: Answer = {
-      questionId: currentQuestion.id,
-      answer: currentAnswer,
-      timestamp: Date.now(),
-    };
-
-    const newAnswers = [...answers, answerObj];
-    setAnswers(newAnswers);
-
-    // Submit to backend
-    try {
-      await submitAnswer(currentQuestion.id, currentAnswer);
-    } catch (error) {
-      console.error('Error submitting answer:', error);
-    }
-
-    setIsSubmitting(false);
-    setCurrentAnswer('');
-
-    // Move to next question or finish
-    if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-    }
-  };
-
-  const handleFinalSubmit = async () => {
-    if (!currentAnswer.trim()) {
-      alert('Please provide an answer to the last question');
+    if (!interviewId) {
+      alert('Interview session missing. Please restart from Configure.');
+      router.push('/configure');
       return;
     }
 
@@ -222,33 +199,48 @@ export default function InterviewPage() {
     if (!currentQuestion) return;
 
     setIsSubmitting(true);
-
-    // Save last answer
     const answerObj: Answer = {
       questionId: currentQuestion.id,
       answer: currentAnswer,
       timestamp: Date.now(),
     };
-
-    const finalAnswers = [...answers, answerObj];
+    const newAnswers = [...answers, answerObj];
 
     try {
-      await submitAnswer(currentQuestion.id, currentAnswer);
-      await submitInterview(finalAnswers);
-      
-      setShowSuccessToast(true);
-      
-      // Clear interview state
-      localStorage.removeItem('interviewConfig');
-      clearInterviewState();
-      
-      setTimeout(() => {
-        logout();
-        router.push('/');
-      }, 2000);
+      const response = await answerQuestion({
+        interviewId,
+        answer: currentAnswer,
+        questionNumber: currentQuestion.questionNumber || currentQuestionIndex + 1,
+      });
+
+      setAnswers(newAnswers);
+      setCurrentAnswer('');
+
+      if (response.is_complete) {
+        setShowSuccessToast(true);
+        localStorage.removeItem('interviewConfig');
+        localStorage.removeItem('interviewInit');
+        clearInterviewState();
+
+        setTimeout(() => {
+          logout();
+          router.push('/');
+        }, 2000);
+      } else if (response.next_question) {
+        const nextQuestion: Question = {
+          id: `q-${response.next_question.question_number}`,
+          question: response.next_question.question,
+          type: 'technical',
+          questionNumber: response.next_question.question_number,
+          topic: response.next_question.topic,
+          difficulty: response.next_question.difficulty,
+        };
+        setQuestions((prev) => [...prev, nextQuestion]);
+        setCurrentQuestionIndex((prev) => prev + 1);
+      }
     } catch (error) {
-      console.error('Error submitting interview:', error);
-      alert('Failed to submit interview. Please try again.');
+      console.error('Error submitting answer:', error);
+      alert('Failed to submit answer. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -265,9 +257,11 @@ export default function InterviewPage() {
     );
   }
 
-  const isLastQuestion = currentQuestionIndex === questions.length - 1;
   const isIntroSection = currentQuestionIndex === -1;
   const currentQuestion = currentQuestionIndex >= 0 ? questions[currentQuestionIndex] : null;
+  const isLastQuestion =
+    (currentQuestion?.questionNumber || 0) === totalQuestions ||
+    currentQuestionIndex === questions.length - 1;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -277,7 +271,9 @@ export default function InterviewPage() {
           <div className="flex justify-between items-center h-16">
             <h1 className="text-2xl font-bold text-blue-600">AI Interview</h1>
             <div className="text-sm text-gray-600">
-              Question {currentQuestionIndex + 1} of {questions.length + 1}
+              {isIntroSection
+                ? 'Introduction'
+                : `Question ${currentQuestion?.questionNumber || currentQuestionIndex + 1} of ${totalQuestions}`}
             </div>
           </div>
         </div>
@@ -351,23 +347,13 @@ export default function InterviewPage() {
                 </div>
 
                 <div className="flex justify-end gap-4">
-                  {isLastQuestion ? (
-                    <Button
-                      onClick={handleFinalSubmit}
-                      size="lg"
-                      isLoading={isSubmitting}
-                    >
-                      Submit Interview
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={handleQuestionSubmit}
-                      size="lg"
-                      isLoading={isSubmitting}
-                    >
-                      Submit & Next
-                    </Button>
-                  )}
+                  <Button
+                    onClick={handleQuestionSubmit}
+                    size="lg"
+                    isLoading={isSubmitting}
+                  >
+                    {isLastQuestion ? 'Submit Interview' : 'Submit & Next'}
+                  </Button>
                 </div>
               </div>
             </div>
