@@ -24,10 +24,12 @@ export interface Answer {
 }
 
 export interface InterviewState {
-  config: InterviewConfig | null;
+  config: InterviewConfig;
   currentQuestionIndex: number;
   questions: Question[];
   answers: Answer[];
-  isIntroCompleted: boolean;
+  introAnswer: string;
+  currentAnswer: string;
+  introHeading: string;
 }
 

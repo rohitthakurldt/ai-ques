@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/Button';
@@ -11,10 +11,56 @@ import { InterviewConfig, Question, Answer } from '@/types';
 import { fetchQuestions, submitAnswer, submitInterview } from '@/lib/api';
 import { getRandomIntroHeading } from '@/lib/utils';
 
+const INTERVIEW_STATE_KEY = 'interviewState';
+
+const saveInterviewState = (state: {
+  config: InterviewConfig;
+  currentQuestionIndex: number;
+  questions: Question[];
+  answers: Answer[];
+  introAnswer: string;
+  currentAnswer: string;
+  introHeading: string;
+}) => {
+  try {
+    localStorage.setItem(INTERVIEW_STATE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.error('Error saving interview state:', error);
+  }
+};
+
+const loadInterviewState = (): {
+  config: InterviewConfig;
+  currentQuestionIndex: number;
+  questions: Question[];
+  answers: Answer[];
+  introAnswer: string;
+  currentAnswer: string;
+  introHeading: string;
+} | null => {
+  try {
+    const saved = localStorage.getItem(INTERVIEW_STATE_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (error) {
+    console.error('Error loading interview state:', error);
+  }
+  return null;
+};
+
+const clearInterviewState = () => {
+  try {
+    localStorage.removeItem(INTERVIEW_STATE_KEY);
+  } catch (error) {
+    console.error('Error clearing interview state:', error);
+  }
+};
+
 export default function InterviewPage() {
   const { isAuthenticated, logout } = useAuth();
   const router = useRouter();
-  const [, setConfig] = useState<InterviewConfig | null>(null);
+  const [config, setConfig] = useState<InterviewConfig | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1); // -1 means intro section
@@ -23,7 +69,14 @@ export default function InterviewPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
-  const [introHeading] = useState(getRandomIntroHeading());
+  const [introHeading, setIntroHeading] = useState(() => {
+    // Only try to load saved heading on client side
+    if (typeof window !== 'undefined') {
+      const saved = loadInterviewState();
+      return saved?.introHeading || getRandomIntroHeading();
+    }
+    return getRandomIntroHeading();
+  });
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -31,18 +84,33 @@ export default function InterviewPage() {
       return;
     }
 
-    // Load config from localStorage
-    const savedConfig = localStorage.getItem('interviewConfig');
-    if (!savedConfig) {
-      router.push('/configure');
-      return;
+    // Try to load saved interview state first
+    const savedState = loadInterviewState();
+    
+    if (savedState) {
+      // Restore from saved state
+      setConfig(savedState.config);
+      setQuestions(savedState.questions);
+      setAnswers(savedState.answers);
+      setCurrentQuestionIndex(savedState.currentQuestionIndex);
+      setIntroAnswer(savedState.introAnswer);
+      setCurrentAnswer(savedState.currentAnswer);
+      setIntroHeading(savedState.introHeading);
+      setIsLoading(false);
+    } else {
+      // Load config from localStorage
+      const savedConfig = localStorage.getItem('interviewConfig');
+      if (!savedConfig) {
+        router.push('/configure');
+        return;
+      }
+
+      const interviewConfig: InterviewConfig = JSON.parse(savedConfig);
+      setConfig(interviewConfig);
+
+      // Fetch questions
+      loadQuestions(interviewConfig);
     }
-
-    const interviewConfig: InterviewConfig = JSON.parse(savedConfig);
-    setConfig(interviewConfig);
-
-    // Fetch questions
-    loadQuestions(interviewConfig);
   }, [isAuthenticated, router]);
 
   const loadQuestions = async (interviewConfig: InterviewConfig) => {
@@ -50,12 +118,44 @@ export default function InterviewPage() {
       setIsLoading(true);
       const fetchedQuestions = await fetchQuestions(interviewConfig);
       setQuestions(fetchedQuestions);
+      
+      // Save initial state
+      saveInterviewState({
+        config: interviewConfig,
+        currentQuestionIndex: -1,
+        questions: fetchedQuestions,
+        answers: [],
+        introAnswer: '',
+        currentAnswer: '',
+        introHeading,
+      });
+      
       setIsLoading(false);
     } catch (error) {
       console.error('Error loading questions:', error);
       setIsLoading(false);
     }
   };
+
+  // Helper function to save state
+  const saveState = useCallback(() => {
+    if (config && questions.length > 0) {
+      saveInterviewState({
+        config,
+        currentQuestionIndex,
+        questions,
+        answers,
+        introAnswer,
+        currentAnswer,
+        introHeading,
+      });
+    }
+  }, [config, currentQuestionIndex, questions, answers, introAnswer, currentAnswer, introHeading]);
+
+  // Save state whenever key values change
+  useEffect(() => {
+    saveState();
+  }, [saveState]);
 
   const handleIntroSubmit = () => {
     if (!introAnswer.trim()) {
@@ -69,8 +169,10 @@ export default function InterviewPage() {
       answer: introAnswer,
       timestamp: Date.now(),
     };
-    setAnswers([introAnswerObj]);
+    const newAnswers = [introAnswerObj];
+    setAnswers(newAnswers);
     setCurrentQuestionIndex(0);
+    setCurrentAnswer(''); // Clear current answer for next question
   };
 
   const handleQuestionSubmit = async () => {
@@ -138,7 +240,7 @@ export default function InterviewPage() {
       
       // Clear interview state
       localStorage.removeItem('interviewConfig');
-      localStorage.removeItem('interviewState');
+      clearInterviewState();
       
       setTimeout(() => {
         logout();
