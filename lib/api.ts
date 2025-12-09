@@ -4,6 +4,7 @@ import {
   Answer,
   InterviewStartResponse,
   AnswerQuestionResponse,
+  InterviewReport,
 } from '@/types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -122,6 +123,27 @@ export async function answerQuestion(params: {
     return data.data as AnswerQuestionResponse;
   } catch (error) {
     console.error('Error submitting answer:', error);
+    throw error;
+  }
+}
+
+export async function fetchInterviewReport(interviewId: string): Promise<InterviewReport> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/interview/report/${interviewId}`, {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch interview report');
+    }
+
+    const data = await response.json();
+    return data.data as InterviewReport;
+  } catch (error) {
+    console.error('Error fetching interview report:', error);
     throw error;
   }
 }

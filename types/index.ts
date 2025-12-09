@@ -79,3 +79,28 @@ export interface AnswerQuestionResponse {
   current_question_num: number;
 }
 
+export interface QuestionBreakdown {
+  question_number: number;
+  question: string;
+  topic: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  answer_summary: string;
+  score: number;
+  feedback: string;
+}
+
+export interface InterviewReport {
+  interview_id: string;
+  overall_score: number;
+  total_questions: number;
+  questions_answered: number;
+  experience_years: number;
+  subject: string;
+  detailed_feedback: string;
+  strong_areas: string[];
+  weak_areas: string[];
+  question_wise_breakdown: QuestionBreakdown[];
+  recommendations: string[];
+  hire_recommendation: string;
+}
+

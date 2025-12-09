@@ -29,6 +29,7 @@ const difficulties = [
 ];
 
 const questionCounts = [
+  { value: '5', label: '5 Questions' },
   { value: '10', label: '10 Questions' },
   { value: '15', label: '15 Questions' },
   { value: '20', label: '20 Questions' },
@@ -89,6 +90,7 @@ export default function ConfigurePage() {
 
     try {
       setIsSubmitting(true);
+      localStorage.removeItem('interviewReport');
       const startResponse = await startInterview(finalConfig);
 
       localStorage.setItem('interviewConfig', JSON.stringify(finalConfig));
