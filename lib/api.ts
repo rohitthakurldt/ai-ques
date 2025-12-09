@@ -148,6 +148,33 @@ export async function fetchInterviewReport(interviewId: string): Promise<Intervi
   }
 }
 
+export async function transcribeSpeech(audioBlob: Blob): Promise<string> {
+  const formData = new FormData();
+  formData.append('file', audioBlob, 'answer.webm');
+  formData.append('language', '');
+  formData.append('prompt', '');
+
+  const response = await fetch(`${API_BASE_URL}/api/speech/transcribe`, {
+    method: 'POST',
+    body: formData,
+    // headers: {
+    //   'Content-Type': 'multipart/form-data',
+    // },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to transcribe audio');
+  }
+
+  const data: { text?: string; transcript?: string } = await response.json();
+  const text = data.text || data.transcript;
+  if (!text) {
+    throw new Error('No transcript returned');
+  }
+
+  return text;
+}
+
 function generateDummyQuestions(config: InterviewConfig): Question[] {
   const questions: Question[] = [];
   const questionTemplates: Record<string, string[]> = {
