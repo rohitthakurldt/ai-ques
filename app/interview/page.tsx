@@ -544,7 +544,7 @@ export default function InterviewPage() {
                   <div className="flex flex-col gap-2">
                     <SpeechToText
                       onTranscript={(text) =>
-                        setIntroAnswer((prev) => prev + " " + text)
+                        setIntroAnswer(() => text)
                       }
                       disabled={false}
                     />
@@ -580,7 +580,7 @@ export default function InterviewPage() {
                   <div className="flex flex-col gap-2">
                     <SpeechToText
                       onTranscript={(text) =>
-                        setCurrentAnswer((prev) => prev + " " + text)
+                        setCurrentAnswer(() => text)
                       }
                       disabled={isSubmitting}
                     />
