@@ -303,7 +303,7 @@ export default function InterviewPage() {
   const currentQuestion =
     currentQuestionIndex >= 0 ? questions[currentQuestionIndex] : null;
   const isLastQuestion =
-    (currentQuestion?.questionNumber || 0) === totalQuestions ||
+    (currentQuestion?.questionNumber || 0) === totalQuestions &&
     currentQuestionIndex === questions.length - 1;
   const hasReport = Boolean(report);
   const breakdownItem = hasReport
