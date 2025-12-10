@@ -33,8 +33,8 @@ const questionCounts = [
   { value: '10', label: '10 Questions' },
   { value: '15', label: '15 Questions' },
   { value: '20', label: '20 Questions' },
-  { value: '25', label: '25 Questions' },
-  { value: '30', label: '30 Questions' },
+  // { value: '25', label: '25 Questions' },
+  // { value: '30', label: '30 Questions' },
 ];
 
 export default function ConfigurePage() {
